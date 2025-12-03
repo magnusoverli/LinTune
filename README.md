@@ -15,7 +15,7 @@ A cross-distribution tool for enrolling Linux devices in Microsoft EntraID and I
 - 🎨 **Modern UI** - Microsoft Fluent Design-inspired interface
 - 🐧 **Cross-Distro** - Supports Arch (untested), CachyOS, Ubuntu (coming soon), Debian (coming soon)
 - 🔒 **Enterprise Ready** - Full EntraID authentication & Intune compliance
-- 📦 **Easy Installation** - Single AppImage executable (coming soon)
+- 📦 **Easy Installation** - Single executable download, no dependencies
 - 🔄 **Automated Setup** - Guided installation process
 - 🛡️ **Safe Configuration** - Automatic backups before system changes
 
@@ -32,18 +32,42 @@ A cross-distribution tool for enrolling Linux devices in Microsoft EntraID and I
 
 ## Quick Start
 
-### Prerequisites
+### For End Users (Recommended)
+
+Download the pre-built executable - no Python installation required!
+
+1. **Download the latest build:**
+   - Go to [Actions](https://github.com/magnusoverli/LinTune/actions)
+   - Click the latest successful workflow
+   - Download `LinTune-linux-x64` artifact
+
+2. **Extract and run:**
+   ```bash
+   tar -xzf LinTune-linux-x64.tar.gz
+   chmod +x LinTune
+   ./LinTune
+   ```
+
+3. **Optional: Install system-wide:**
+   ```bash
+   sudo cp LinTune /usr/local/bin/
+   sudo chmod +x /usr/local/bin/LinTune
+   ```
+
+### For Developers
+
+#### Prerequisites
 
 - One of the supported Linux distributions
 - Python 3.10 or higher
 - Internet connection
 - Sudo access
 
-### Installation (Development)
+#### Installation (Development)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/LinTune.git
+git clone https://github.com/magnusoverli/LinTune.git
 cd LinTune
 
 # Install dependencies
@@ -56,7 +80,7 @@ poetry install
 python -m src.lintune
 ```
 
-### Running the Application
+#### Running the Application
 
 ```bash
 # From the project root
@@ -65,6 +89,10 @@ python -m src.lintune
 # Or with Poetry
 poetry run lintune
 ```
+
+#### Building Executable
+
+See [BUILD.md](BUILD.md) for instructions on building the standalone executable.
 
 ---
 
