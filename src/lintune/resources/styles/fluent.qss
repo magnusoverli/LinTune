@@ -1,0 +1,365 @@
+/* 
+ * LinTune - Theme-Aware Stylesheet
+ * 
+ * Uses only palette() colors for full theme compatibility.
+ * Creates contrast using alternate-base, button, light, dark, shadow.
+ */
+
+/* === Main Window === */
+QMainWindow {
+    background-color: palette(window);
+}
+
+/* === Sidebar Navigation === */
+QFrame#sidebar {
+    background-color: palette(alternate-base);
+    border-right: 1px solid palette(mid);
+    min-width: 100px;
+    max-width: 100px;
+}
+
+QPushButton#navButton {
+    background-color: transparent;
+    border: none;
+    border-left: 4px solid transparent;
+    color: palette(text);
+    padding: 12px 8px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    min-height: 72px;
+}
+
+QPushButton#navButton:hover {
+    background-color: palette(midlight);
+    border-left: 4px solid palette(midlight);
+}
+
+QPushButton#navButton:checked,
+QPushButton#navButton:pressed {
+    background-color: palette(highlight);
+    border-left: 4px solid palette(highlight);
+    color: palette(highlighted-text);
+}
+
+/* === Content Area === */
+QWidget#contentArea {
+    background-color: palette(window);
+}
+
+/* === Cards - use alternate-base for subtle contrast === */
+QFrame.card {
+    background-color: palette(alternate-base);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    padding: 12px;
+}
+
+/* === Labels === */
+QLabel {
+    color: palette(text);
+    background: transparent;
+}
+
+/* === Headings === */
+QLabel[heading="true"] {
+    font-size: 24px;
+    font-weight: 600;
+    color: palette(text);
+}
+
+/* === Section Headers === */
+QLabel.section-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: palette(highlight);
+    padding-bottom: 8px;
+    border-bottom: 1px solid palette(mid);
+}
+
+/* === Primary Buttons - solid background === */
+QPushButton.primary {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+    border: none;
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 32px;
+}
+
+QPushButton.primary:hover {
+    background-color: palette(dark);
+}
+
+QPushButton.primary:disabled {
+    background-color: palette(mid);
+    color: palette(shadow);
+}
+
+/* === Secondary/Outline Buttons === */
+QPushButton.secondary {
+    background-color: palette(button);
+    color: palette(button-text);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 32px;
+}
+
+QPushButton.secondary:hover {
+    background-color: palette(light);
+    border-color: palette(highlight);
+}
+
+/* === Standard Buttons - ensure visibility === */
+QPushButton {
+    background-color: palette(button);
+    color: palette(button-text);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    padding: 6px 16px;
+    min-height: 24px;
+}
+
+QPushButton:hover {
+    background-color: palette(light);
+    border-color: palette(dark);
+}
+
+QPushButton:pressed {
+    background-color: palette(dark);
+}
+
+QPushButton:disabled {
+    background-color: palette(mid);
+    color: palette(shadow);
+}
+
+/* === Nav buttons override (no border) === */
+QPushButton#navButton {
+    background-color: transparent;
+    border: none;
+    border-left: 4px solid transparent;
+}
+
+/* === Input Fields === */
+QLineEdit {
+    background-color: palette(base);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: palette(text);
+}
+
+QLineEdit:focus {
+    border: 2px solid palette(highlight);
+}
+
+QLineEdit:disabled {
+    background-color: palette(window);
+    color: palette(shadow);
+}
+
+/* === Combo Box === */
+QComboBox {
+    background-color: palette(base);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: palette(text);
+}
+
+QComboBox:hover {
+    border-color: palette(highlight);
+}
+
+QComboBox::drop-down {
+    border: none;
+    padding-right: 8px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: palette(base);
+    border: 1px solid palette(mid);
+    selection-background-color: palette(highlight);
+    selection-color: palette(highlighted-text);
+}
+
+/* === Text Edit (Log Viewer) === */
+QTextEdit {
+    background-color: palette(base);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    padding: 8px;
+    font-family: monospace;
+    font-size: 12px;
+    color: palette(text);
+    selection-background-color: palette(highlight);
+    selection-color: palette(highlighted-text);
+}
+
+/* === Check Boxes === */
+QCheckBox {
+    color: palette(text);
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid palette(mid);
+    border-radius: 3px;
+    background-color: palette(base);
+}
+
+QCheckBox::indicator:checked {
+    background-color: palette(highlight);
+    border-color: palette(highlight);
+}
+
+QCheckBox::indicator:hover {
+    border-color: palette(highlight);
+}
+
+/* === Progress Bars === */
+QProgressBar {
+    border: none;
+    border-radius: 4px;
+    background-color: palette(mid);
+    height: 8px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: palette(highlight);
+    border-radius: 4px;
+}
+
+/* === Status Bar === */
+QStatusBar {
+    background-color: palette(alternate-base);
+    border-top: 1px solid palette(mid);
+    color: palette(text);
+    font-size: 12px;
+    padding: 4px;
+}
+
+/* === Scroll Bars === */
+QScrollBar:vertical {
+    border: none;
+    background: palette(window);
+    width: 12px;
+}
+
+QScrollBar::handle:vertical {
+    background: palette(mid);
+    min-height: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: palette(dark);
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    border: none;
+    background: none;
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: palette(window);
+    height: 12px;
+}
+
+QScrollBar::handle:horizontal {
+    background: palette(mid);
+    min-width: 20px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+/* === Tool Tips === */
+QToolTip {
+    background-color: palette(base);
+    color: palette(text);
+    border: 1px solid palette(mid);
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+
+/* === List Widget === */
+QListWidget {
+    background-color: palette(base);
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+}
+
+QListWidget::item {
+    padding: 8px;
+    color: palette(text);
+}
+
+QListWidget::item:hover {
+    background-color: palette(midlight);
+}
+
+QListWidget::item:selected {
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+/* === Group Box === */
+QGroupBox {
+    font-weight: 600;
+    border: 1px solid palette(mid);
+    border-radius: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    color: palette(text);
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    color: palette(bright-text);
+}
+
+/* === Frames with borders === */
+QFrame[frameShape="4"] { /* HLine */
+    background-color: palette(mid);
+    max-height: 1px;
+}
+
+QFrame[frameShape="5"] { /* VLine */
+    background-color: palette(mid);
+    max-width: 1px;
+}
+
+/* === Dialog styling === */
+QDialog {
+    background-color: palette(window);
+}
+
+/* === Message Box === */
+QMessageBox {
+    background-color: palette(window);
+}
+
+QMessageBox QLabel {
+    color: palette(text);
+}
+
+QMessageBox QPushButton {
+    min-width: 80px;
+}
