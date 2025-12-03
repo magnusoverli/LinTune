@@ -57,9 +57,10 @@ jobs:
     
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        # Use --break-system-packages since we're in a container (safe)
+        python -m pip install --upgrade pip --break-system-packages
+        pip install -r requirements.txt --break-system-packages
+        pip install pyinstaller --break-system-packages
     
     - name: Build executable with PyInstaller
       run: |
