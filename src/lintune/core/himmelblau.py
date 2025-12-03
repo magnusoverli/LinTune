@@ -220,9 +220,12 @@ class HimmelblauBuilder:
             print(f"Warning: Failed to cleanup: {e}")
             return True
     
-    def build_and_install(self) -> bool:
+    def build_and_install(self, skip_cleanup=False) -> bool:
         """
-        Complete build process: clone, build, install, cleanup
+        Complete build process: clone, build, install, optionally cleanup
+        
+        Args:
+            skip_cleanup: If True, don't clean up build directory (needed for service generation)
         
         Returns:
             True if successful
@@ -231,8 +234,11 @@ class HimmelblauBuilder:
             ("Clone repository", self.clone_repo),
             ("Build binaries", self.build),
             ("Install binaries", self.install_binaries),
-            ("Cleanup", self.cleanup),
         ]
+        
+        # Only cleanup if requested
+        if not skip_cleanup:
+            steps.append(("Cleanup", self.cleanup))
         
         for step_name, step_func in steps:
             if not step_func():

@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QObject
 
 from .widgets import StatusBadge
+from ..utils.sudo_helper import run_with_sudo
 
 
 class AadToolWorker(QObject):
@@ -269,9 +270,10 @@ class SettingsView(QWidget):
         backup_row.addWidget(self.backup_badge)
         right.addLayout(backup_row)
         
-        # Restore button
+        # Restore and Uninstall buttons
         restore_row = QHBoxLayout()
-        self.restore_btn = QPushButton("Restore Original Config")
+        
+        self.restore_btn = QPushButton("Restore Config")
         self.restore_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.restore_btn.setStyleSheet("""
             QPushButton { background: transparent; color: palette(link-visited); border: 1px solid palette(link-visited);
@@ -280,6 +282,17 @@ class SettingsView(QWidget):
         """)
         self.restore_btn.clicked.connect(self.restore_backups)
         restore_row.addWidget(self.restore_btn)
+        
+        self.uninstall_btn = QPushButton("Full Uninstall")
+        self.uninstall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.uninstall_btn.setStyleSheet("""
+            QPushButton { background: transparent; color: #d32f2f; border: 1px solid #d32f2f;
+                border-radius: 4px; padding: 6px 16px; font-size: 12px; font-weight: 600; }
+            QPushButton:hover { background: #ffebee; }
+        """)
+        self.uninstall_btn.clicked.connect(self.full_uninstall)
+        restore_row.addWidget(self.uninstall_btn)
+        
         restore_row.addStretch()
         right.addLayout(restore_row)
         
@@ -401,20 +414,253 @@ apply_policy = {"true" if self.policy_checkbox.isChecked() else "false"}
                 QMessageBox.warning(self, "Error", str(e))
     
     def restore_backups(self):
+        """Restore original configuration with progress dialog"""
         if QMessageBox.question(self, "Restore?", 
             "Restore original config?\n\nEntraID will be disabled.\nRestart system afterward.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
+        
+        # First, prompt for sudo password
+        from .dialogs import SudoPasswordDialog
+        from ..utils.sudo_helper import get_sudo_helper
+        
+        sudo_helper = get_sudo_helper()
+        if not sudo_helper.validated:
+            sudo_dialog = SudoPasswordDialog(self)
+            if sudo_dialog.exec() != SudoPasswordDialog.DialogCode.Accepted:
+                return  # User cancelled password prompt
+        
+        # Create progress dialog with detailed steps
+        progress = QProgressDialog("Restoring configuration...", None, 0, 5, self)
+        progress.setWindowTitle("Restoring Configuration")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.show()
+        QApplication.processEvents()
+        
         try:
-            subprocess.run(["sudo", "systemctl", "stop", "himmelblaud"], timeout=30)
+            # Step 1: Stop services
+            progress.setValue(1)
+            progress.setLabelText("Stopping Himmelblau services...")
+            QApplication.processEvents()
+            try:
+                run_with_sudo(["systemctl", "stop", "himmelblaud"], timeout=30)
+                run_with_sudo(["systemctl", "stop", "himmelblaud-tasks"], timeout=30)
+            except:
+                pass  # Services might not exist
+            
+            # Step 2: Disable services
+            progress.setValue(2)
+            progress.setLabelText("Disabling services...")
+            QApplication.processEvents()
+            try:
+                run_with_sudo(["systemctl", "disable", "himmelblaud"], timeout=30)
+                run_with_sudo(["systemctl", "disable", "himmelblaud-tasks"], timeout=30)
+            except:
+                pass
+            
+            # Step 3: Restore NSS config
+            progress.setValue(3)
+            progress.setLabelText("Restoring NSS configuration...")
+            QApplication.processEvents()
             if Path("/etc/nsswitch.conf.backup").exists():
-                subprocess.run(["sudo", "cp", "/etc/nsswitch.conf.backup", "/etc/nsswitch.conf"], check=True)
+                run_with_sudo(["cp", "/etc/nsswitch.conf.backup", "/etc/nsswitch.conf"], timeout=10)
+            else:
+                print("Warning: NSS backup not found")
+            
+            # Step 4: Restore PAM config
+            progress.setValue(4)
+            progress.setLabelText("Restoring PAM configuration...")
+            QApplication.processEvents()
             if Path("/etc/pam.d/system-auth.backup").exists():
-                subprocess.run(["sudo", "cp", "/etc/pam.d/system-auth.backup", "/etc/pam.d/system-auth"], check=True)
+                run_with_sudo(["cp", "/etc/pam.d/system-auth.backup", "/etc/pam.d/system-auth"], timeout=10)
+            else:
+                print("Warning: PAM backup not found")
+            
+            # Step 5: Update status
+            progress.setValue(5)
+            progress.setLabelText("Updating status...")
+            QApplication.processEvents()
             self.update_service_status()
-            QMessageBox.information(self, "Done", "Restored. Please restart system.")
+            
+            progress.close()
+            QMessageBox.information(self, "Done", 
+                "Configuration restored successfully!\n\n"
+                "EntraID authentication is now disabled.\n\n"
+                "Please RESTART your system to complete the restore.")
+                
         except Exception as e:
-            QMessageBox.warning(self, "Error", str(e))
+            progress.close()
+            QMessageBox.warning(self, "Error", 
+                f"Failed to restore configuration:\n\n{str(e)}\n\n"
+                "Some components may not have been restored.")
+    
+    def full_uninstall(self):
+        """Complete uninstall of all Himmelblau components with detailed progress"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Full Uninstall")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText("Complete Uninstall")
+        msg.setInformativeText(
+            "This will COMPLETELY REMOVE all Himmelblau components:\n\n"
+            "• All configuration files\n"
+            "• System services\n"
+            "• Installed binaries\n"
+            "• Cache directories\n"
+            "• Build files\n"
+            "• Build dependencies (rust, cargo, etc.)\n\n"
+            "Your system will be restored to pre-enrollment state.\n\n"
+            "Do you want to proceed?"
+        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.No)
+        
+        if msg.exec() != QMessageBox.StandardButton.Yes:
+            return
+        
+        # First, prompt for sudo password
+        from .dialogs import SudoPasswordDialog
+        from ..utils.sudo_helper import get_sudo_helper
+        
+        sudo_helper = get_sudo_helper()
+        if not sudo_helper.validated:
+            sudo_dialog = SudoPasswordDialog(self)
+            if sudo_dialog.exec() != SudoPasswordDialog.DialogCode.Accepted:
+                return  # User cancelled password prompt
+        
+        # Create detailed progress dialog (11 steps now with build deps)
+        progress = QProgressDialog("Starting uninstall...", None, 0, 11, self)
+        progress.setWindowTitle("Uninstalling Himmelblau")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.show()
+        QApplication.processEvents()
+        
+        try:
+            from ..core.configurator import SystemConfigurator
+            
+            configurator = SystemConfigurator()
+            
+            # Step 1-2: Stop services
+            progress.setValue(1)
+            progress.setLabelText("Stopping Himmelblau services...")
+            QApplication.processEvents()
+            try:
+                run_with_sudo(["systemctl", "stop", "himmelblaud"], timeout=30)
+                run_with_sudo(["systemctl", "stop", "himmelblaud-tasks"], timeout=30)
+            except:
+                pass  # Services might not exist
+            
+            progress.setValue(2)
+            progress.setLabelText("Disabling services...")
+            QApplication.processEvents()
+            try:
+                run_with_sudo(["systemctl", "disable", "himmelblaud"], timeout=30)
+                run_with_sudo(["systemctl", "disable", "himmelblaud-tasks"], timeout=30)
+            except:
+                pass
+            
+            # Step 3: Remove service files
+            progress.setValue(3)
+            progress.setLabelText("Removing systemd service files...")
+            QApplication.processEvents()
+            run_with_sudo(["rm", "-f", "/etc/systemd/system/himmelblaud.service"], timeout=10)
+            run_with_sudo(["rm", "-f", "/etc/systemd/system/himmelblaud-tasks.service"], timeout=10)
+            run_with_sudo(["rm", "-f", "/usr/share/dbus-1/services/com.microsoft.identity.broker1.service"], timeout=10)
+            run_with_sudo(["systemctl", "daemon-reload"], timeout=10)
+            
+            # Step 4: Restore configs
+            progress.setValue(4)
+            progress.setLabelText("Restoring original configurations...")
+            QApplication.processEvents()
+            if Path("/etc/nsswitch.conf.backup").exists():
+                run_with_sudo(["cp", "/etc/nsswitch.conf.backup", "/etc/nsswitch.conf"], timeout=10)
+            if Path("/etc/pam.d/system-auth.backup").exists():
+                run_with_sudo(["cp", "/etc/pam.d/system-auth.backup", "/etc/pam.d/system-auth"], timeout=10)
+            
+            # Step 5: Remove config directory
+            progress.setValue(5)
+            progress.setLabelText("Removing Himmelblau configuration...")
+            QApplication.processEvents()
+            run_with_sudo(["rm", "-rf", "/etc/himmelblau"], timeout=10)
+            
+            # Step 6-7: Remove binaries
+            progress.setValue(6)
+            progress.setLabelText("Removing binaries (1/2)...")
+            QApplication.processEvents()
+            run_with_sudo(["rm", "-f", "/usr/sbin/himmelblaud"], timeout=10)
+            run_with_sudo(["rm", "-f", "/usr/sbin/himmelblaud_tasks"], timeout=10)
+            run_with_sudo(["rm", "-f", "/usr/bin/aad-tool"], timeout=10)
+            run_with_sudo(["rm", "-f", "/usr/sbin/broker"], timeout=10)
+            
+            progress.setValue(7)
+            progress.setLabelText("Removing binaries (2/2)...")
+            QApplication.processEvents()
+            run_with_sudo(["rm", "-f", "/usr/bin/linux-entra-sso"], timeout=10)
+            run_with_sudo(["rm", "-f", "/usr/lib/security/pam_himmelblau.so"], timeout=10)
+            run_with_sudo(["rm", "-f", "/usr/lib/libnss_himmelblau.so.2"], timeout=10)
+            
+            # Step 8: Remove cache directories
+            progress.setValue(8)
+            progress.setLabelText("Removing cache directories...")
+            QApplication.processEvents()
+            run_with_sudo(["rm", "-rf", "/var/cache/nss-himmelblau"], timeout=10)
+            run_with_sudo(["rm", "-rf", "/var/cache/himmelblau-policies"], timeout=10)
+            
+            # Step 9: Remove build directories
+            progress.setValue(9)
+            progress.setLabelText("Removing build directories...")
+            QApplication.processEvents()
+            import shutil
+            build_dirs = [Path("/tmp/himmelblau"), Path("/tmp/himmelblau-services")]
+            for build_dir in build_dirs:
+                if build_dir.exists():
+                    shutil.rmtree(build_dir, ignore_errors=True)
+            
+            # Step 10: Remove build dependencies
+            progress.setValue(10)
+            progress.setLabelText("Removing build dependencies...")
+            QApplication.processEvents()
+            
+            # Remove Himmelblau-specific build deps
+            build_deps = ["rust", "cargo", "tpm2-tss"]
+            for dep in build_deps:
+                try:
+                    run_with_sudo(["pacman", "-R", "--noconfirm", dep], timeout=60)
+                except:
+                    pass  # Ignore if package not installed
+            
+            # Step 11: Update status
+            progress.setValue(11)
+            progress.setLabelText("Finalizing...")
+            QApplication.processEvents()
+            
+            # Emit signal to refresh main window status
+            self.config_changed.emit()
+            self.update_service_status()
+            
+            progress.close()
+            
+            QMessageBox.information(self, "Uninstall Complete",
+                "All Himmelblau components have been removed.\n\n"
+                "✓ Services stopped and disabled\n"
+                "✓ Configurations restored\n"
+                "✓ Binaries removed\n"
+                "✓ Cache cleared\n"
+                "✓ Build dependencies removed\n\n"
+                "Please REBOOT your system to complete the uninstall."
+            )
+            
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(self, "Uninstall Failed", 
+                f"Failed to uninstall:\n\n{str(e)}\n\n"
+                "You may need to manually remove components."
+            )
     
     def enumerate_users(self):
         """Enumerate and cache EntraID users using native aad-tool (async)"""
@@ -457,7 +703,22 @@ apply_policy = {"true" if self.policy_checkbox.isChecked() else "false"}
         if success:
             QMessageBox.information(self, "Enumeration", f"✓ {message}")
         else:
-            QMessageBox.warning(self, "Enumeration", f"Failed:\n{message}")
+            # Clean up error message - remove timestamps and extract meaningful errors
+            import re
+            # Remove ANSI color codes
+            clean_msg = re.sub(r'\x1b\[[0-9;]*m', '', message)
+            # Remove timestamps
+            clean_msg = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z\s+', '', clean_msg)
+            # Remove ERROR/WARN prefixes but keep the module name
+            clean_msg = re.sub(r'(ERROR|WARN)\s+', '', clean_msg)
+            # Extract just the error lines (not full stack traces)
+            lines = [line.strip() for line in clean_msg.split('\n') if line.strip() and not line.startswith('   ')]
+            clean_msg = '\n'.join(lines[:5])  # Limit to first 5 lines
+            
+            QMessageBox.warning(self, "Enumeration Failed", 
+                f"Failed to enumerate users:\n\n{clean_msg}\n\n"
+                "This usually means you need to authenticate first.\n"
+                "Try using 'aad-tool login' from the command line.")
     
     def check_tpm(self):
         """Check TPM status using native aad-tool"""

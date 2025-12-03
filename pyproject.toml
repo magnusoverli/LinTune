@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lintune"
-version = "0.1.0"
+version = "0.1.1"
 description = "EntraID & Intune Setup for Linux - Cross-distro enrollment tool"
 authors = ["Magnus Overli <magnus@example.com>"]
 readme = "README.md"

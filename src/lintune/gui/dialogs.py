@@ -4,121 +4,121 @@ Dialogs for LinTune
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QCheckBox, QProgressBar, QFrame, QTextEdit
+    QPushButton, QCheckBox, QProgressBar, QFrame, QTextEdit,
+    QInputDialog, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 from PyQt6.QtGui import QFont
 
 from ..core.installer import Installer, InstallProgress, InstallStatus
+from ..utils.sudo_helper import get_sudo_helper
 
 
-class DomainInputDialog(QDialog):
-    """Dialog for entering EntraID domain"""
+def get_sudo_password(parent=None) -> tuple[bool, str]:
+    """
+    Show native password dialog and validate sudo password
+    
+    Returns:
+        (success, password) tuple
+    """
+    sudo_helper = get_sudo_helper()
+    
+    # If already validated, return cached password
+    if sudo_helper.validated:
+        return (True, sudo_helper.password)
+    
+    while True:
+        password, ok = QInputDialog.getText(
+            parent,
+            "Administrator Password Required",
+            "LinTune needs administrator privileges to configure your system.\n\nEnter your password:",
+            QLineEdit.EchoMode.Password
+        )
+        
+        if not ok:
+            return (False, "")  # User cancelled
+        
+        if not password:
+            QMessageBox.warning(parent, "Password Required", "Password cannot be empty.")
+            continue
+        
+        # Validate password
+        if sudo_helper.set_password(password):
+            return (True, password)
+        else:
+            QMessageBox.warning(parent, "Incorrect Password", "Incorrect password. Please try again.")
+            continue
+
+
+def get_domain_info(parent=None) -> tuple[bool, str, bool]:
+    """
+    Show native domain input dialog
+    
+    Returns:
+        (success, domain, grant_sudo) tuple
+    """
+    domain, ok = QInputDialog.getText(
+        parent,
+        "Connect to Organization",
+        "Enter your EntraID domain to configure this device for enterprise management.\n\nEntraID Domain (e.g., company.onmicrosoft.com):"
+    )
+    
+    if not ok:
+        return (False, "", False)  # User cancelled
+    
+    domain = domain.strip()
+    if not domain:
+        QMessageBox.warning(parent, "Domain Required", "Please enter your EntraID domain.")
+        return (False, "", False)
+    
+    # Ask about sudo access
+    reply = QMessageBox.question(
+        parent,
+        "Grant Sudo Access",
+        f"Grant sudo access to EntraID users from {domain}?\n\n"
+        "This allows authenticated users to run administrative commands.",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.Yes
+    )
+    
+    grant_sudo = (reply == QMessageBox.StandardButton.Yes)
+    
+    return (True, domain, grant_sudo)
+
+
+# Legacy classes for compatibility - will be replaced with functions above
+class SudoPasswordDialog:
+    """Legacy compatibility wrapper - use get_sudo_password() instead"""
+    class DialogCode:
+        Accepted = 1
+        Rejected = 0
     
     def __init__(self, parent=None):
-        super().__init__(parent)
+        self.parent = parent
+        self.password = ""
+    
+    def exec(self):
+        success, password = get_sudo_password(self.parent)
+        self.password = password
+        return self.DialogCode.Accepted if success else self.DialogCode.Rejected
+
+
+class DomainInputDialog:
+    """Legacy compatibility wrapper - use get_domain_info() instead"""
+    class DialogCode:
+        Accepted = 1
+        Rejected = 0
+    
+    def __init__(self, parent=None):
+        self.parent = parent
         self.domain = ""
         self.grant_sudo = True
-        self.init_ui()
     
-    def init_ui(self):
-        self.setWindowTitle("Connect to Organization")
-        self.setFixedSize(450, 280)
-        self.setStyleSheet("background-color: palette(window);")
-        
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(24, 24, 24, 24)
-        
-        # Title
-        title = QLabel("Connect to your organization")
-        title.setStyleSheet("font-size: 18px; font-weight: 600; ")
-        layout.addWidget(title)
-        
-        # Description
-        desc = QLabel("Enter your EntraID domain to configure this device for enterprise management.")
-        desc.setWordWrap(True)
-        desc.setStyleSheet("font-size: 13px; ")
-        layout.addWidget(desc)
-        
-        layout.addSpacing(8)
-        
-        # Domain input
-        domain_label = QLabel("EntraID Domain")
-        domain_label.setStyleSheet("font-size: 12px; font-weight: 600; ")
-        layout.addWidget(domain_label)
-        
-        self.domain_input = QLineEdit()
-        self.domain_input.setPlaceholderText("company.onmicrosoft.com")
-        self.domain_input.setStyleSheet("""
-            QLineEdit {
-                background-color: palette(window);
-                border: 1px solid palette(mid);
-                border-radius: 4px;
-                padding: 10px 12px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 2px solid palette(highlight);
-            }
-        """)
-        layout.addWidget(self.domain_input)
-        
-        # Sudo checkbox
-        self.sudo_checkbox = QCheckBox("Grant sudo access to EntraID users")
-        self.sudo_checkbox.setChecked(True)
-        self.sudo_checkbox.setStyleSheet("font-size: 13px; ")
-        layout.addWidget(self.sudo_checkbox)
-        
-        layout.addStretch()
-        
-        # Buttons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: 1px solid palette(mid);
-                border-radius: 4px;
-                padding: 8px 24px;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: palette(midlight);
-            }
-        """)
-        cancel_btn.clicked.connect(self.reject)
-        btn_layout.addWidget(cancel_btn)
-        
-        connect_btn = QPushButton("Connect")
-        connect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: palette(highlight);
-                color: palette(highlighted-text);
-                border: none;
-                border-radius: 4px;
-                padding: 8px 24px;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: palette(dark);
-            }
-        """)
-        connect_btn.clicked.connect(self.on_connect)
-        btn_layout.addWidget(connect_btn)
-        
-        layout.addLayout(btn_layout)
-    
-    def on_connect(self):
-        domain = self.domain_input.text().strip()
-        if domain:
-            self.domain = domain
-            self.grant_sudo = self.sudo_checkbox.isChecked()
-            self.accept()
+    def exec(self):
+        success, domain, grant_sudo = get_domain_info(self.parent)
+        self.domain = domain
+        self.grant_sudo = grant_sudo
+        return self.DialogCode.Accepted if success else self.DialogCode.Rejected
 
 
 class InstallWorker(QThread):

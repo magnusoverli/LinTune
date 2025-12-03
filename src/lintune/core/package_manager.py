@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .distro import SupportedDistro
+from ..utils.sudo_helper import run_with_sudo
 
 
 @dataclass
@@ -55,10 +56,8 @@ class PacmanManager(PackageManager):
     def update_repos(self) -> bool:
         """Update package repositories"""
         try:
-            result = subprocess.run(
-                ["sudo", self.cmd, "-Sy"],
-                capture_output=True,
-                text=True,
+            result = run_with_sudo(
+                [self.cmd, "-Sy"],
                 timeout=60
             )
             return result.returncode == 0
@@ -72,10 +71,8 @@ class PacmanManager(PackageManager):
         
         try:
             # Use --noconfirm and --needed
-            result = subprocess.run(
-                ["sudo", self.cmd, "-S", "--noconfirm", "--needed"] + packages,
-                capture_output=True,
-                text=True,
+            result = run_with_sudo(
+                [self.cmd, "-S", "--noconfirm", "--needed"] + packages,
                 timeout=600  # 10 minutes
             )
             
@@ -126,9 +123,8 @@ class PacmanManager(PackageManager):
             return True
         
         try:
-            result = subprocess.run(
-                ["sudo", self.cmd, "-R", "--noconfirm"] + packages,
-                capture_output=True,
+            result = run_with_sudo(
+                [self.cmd, "-R", "--noconfirm"] + packages,
                 timeout=300
             )
             return result.returncode == 0

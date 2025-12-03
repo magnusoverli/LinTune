@@ -14,7 +14,7 @@ from PyQt6.QtGui import QFont
 from ..core.distro import DistroInfo
 from ..core.validator import SystemStatus
 from .widgets import RefreshButton, StatusDot
-from .dialogs import DomainInputDialog, InstallProgressDialog
+from .dialogs import DomainInputDialog, InstallProgressDialog, SudoPasswordDialog
 
 
 class StatusCard(QFrame):
@@ -200,7 +200,6 @@ class EnrollmentProgressCard(QFrame):
         # Progress dots (visual indicator)
         steps = [
             ("Check", not status.is_fully_configured),
-            ("Prep", status.gdm_installed),
             ("Build", status.himmelblau_installed),
             ("Config", status.nss_configured and status.pam_configured),
             ("Enroll", status.is_fully_configured),
@@ -494,10 +493,24 @@ class DashboardView(QWidget):
     
     def start_enrollment(self, mode: str):
         """Start the enrollment process"""
+        print(f"[DEBUG] start_enrollment called with mode: {mode}")
         if mode == "auto":
+            # First, show sudo password dialog
+            print("[DEBUG] Showing sudo password dialog...")
+            sudo_dialog = SudoPasswordDialog(self)
+            result = sudo_dialog.exec()
+            print(f"[DEBUG] Sudo dialog result: {result}")
+            if result != SudoPasswordDialog.DialogCode.Accepted:
+                print("[DEBUG] Sudo dialog cancelled")
+                return  # User cancelled
+            
+            print("[DEBUG] Sudo password validated, showing domain dialog...")
             # Show domain dialog
             dialog = DomainInputDialog(self)
-            if dialog.exec() == DomainInputDialog.DialogCode.Accepted:
+            result = dialog.exec()
+            print(f"[DEBUG] Domain dialog result: {result}, domain: {dialog.domain}")
+            if result == DomainInputDialog.DialogCode.Accepted:
+                print(f"[DEBUG] Starting installation for domain: {dialog.domain}")
                 # Start installation
                 progress_dialog = InstallProgressDialog(
                     dialog.domain, 
@@ -508,4 +521,6 @@ class DashboardView(QWidget):
                 
                 # Refresh status after installation
                 self.refresh_requested.emit()
+            else:
+                print("[DEBUG] Domain dialog cancelled or rejected")
 

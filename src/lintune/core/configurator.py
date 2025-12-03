@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
+from ..utils.sudo_helper import run_with_sudo
+
 
 class SystemConfigurator:
     """Configures system for Himmelblau/EntraID"""
@@ -51,13 +53,25 @@ class SystemConfigurator:
             True if successful
         """
         if not file_path.exists():
+            print(f"Warning: File to backup doesn't exist: {file_path}")
             return True
         
         backup_path = Path(str(file_path) + ".backup")
         
-        try:
-            shutil.copy2(file_path, backup_path)
+        # Check if backup already exists
+        if backup_path.exists():
+            print(f"Backup already exists: {backup_path}")
             return True
+        
+        try:
+            # Use sudo to copy since the file is owned by root
+            result = run_with_sudo(["cp", str(file_path), str(backup_path)])
+            if result.returncode == 0:
+                print(f"Backup created: {backup_path}")
+                return True
+            else:
+                print(f"Backup failed: {result.stderr}")
+                return False
         except Exception as e:
             print(f"Backup failed: {e}")
             return False
@@ -126,9 +140,8 @@ class SystemConfigurator:
                 tmp.write(new_content)
                 tmp_path = tmp.name
             
-            result = subprocess.run(
-                ["sudo", "cp", tmp_path, str(self.NSS_CONF)],
-                capture_output=True
+            result = run_with_sudo(
+                ["cp", tmp_path, str(self.NSS_CONF)]
             )
             
             Path(tmp_path).unlink(missing_ok=True)
@@ -184,9 +197,8 @@ session    optional                    pam_permit.so
                 tmp.write(pam_config)
                 tmp_path = tmp.name
             
-            result = subprocess.run(
-                ["sudo", "cp", tmp_path, str(self.PAM_CONF)],
-                capture_output=True
+            result = run_with_sudo(
+                ["cp", tmp_path, str(self.PAM_CONF)]
             )
             
             Path(tmp_path).unlink(missing_ok=True)
@@ -218,7 +230,7 @@ session    optional                    pam_permit.so
             if result.returncode != 0:
                 return False
             
-            # Modify for Arch (comment out HSM PIN lines)
+            # Modify for Arch (comment out HSM PIN lines and add logging)
             himmelblaud_service = services_dir / "himmelblaud.service"
             
             if himmelblaud_service.exists():
@@ -229,32 +241,33 @@ session    optional                    pam_permit.so
                 content = content.replace('Environment=HIMMELBLAU_HSM_PIN_PATH=', 
                                         '#Environment=HIMMELBLAU_HSM_PIN_PATH=')
                 
+                # Add logging directives to capture stderr
+                if '[Service]' in content and 'StandardError=' not in content:
+                    content = content.replace('[Service]', '[Service]\nStandardOutput=journal+console\nStandardError=journal+console')
+                
                 with open(himmelblaud_service, 'w') as f:
                     f.write(content)
             
             # Install services
-            subprocess.run(
-                ["sudo", "cp", str(services_dir / "himmelblaud.service"),
-                 str(self.SYSTEMD_DIR / "himmelblaud.service")],
-                check=True
+            run_with_sudo(
+                ["cp", str(services_dir / "himmelblaud.service"),
+                 str(self.SYSTEMD_DIR / "himmelblaud.service")]
             )
             
-            subprocess.run(
-                ["sudo", "cp", str(services_dir / "himmelblaud-tasks.service"),
-                 str(self.SYSTEMD_DIR / "himmelblaud-tasks.service")],
-                check=True
+            run_with_sudo(
+                ["cp", str(services_dir / "himmelblaud-tasks.service"),
+                 str(self.SYSTEMD_DIR / "himmelblaud-tasks.service")]
             )
             
             # Install D-Bus service
-            subprocess.run(
-                ["sudo", "install", "-m", "644",
+            run_with_sudo(
+                ["install", "-m", "644",
                  str(self.build_dir / "platform" / "debian" / "com.microsoft.identity.broker1.service"),
-                 str(self.DBUS_DIR / "com.microsoft.identity.broker1.service")],
-                check=True
+                 str(self.DBUS_DIR / "com.microsoft.identity.broker1.service")]
             )
             
             # Reload systemd
-            subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+            run_with_sudo(["systemctl", "daemon-reload"])
             
             return True
             
@@ -270,10 +283,16 @@ session    optional                    pam_permit.so
             True if successful
         """
         try:
+            # Ensure /var/cache is readable (some distros lock it down to 700)
+            # This is required for DynamicUser services to access their cache dirs
+            var_cache = Path("/var/cache")
+            if var_cache.exists():
+                print("Ensuring /var/cache is accessible...")
+                run_with_sudo(["chmod", "755", str(var_cache)], timeout=10)
+            
             for cache_dir in self.CACHE_DIRS:
-                subprocess.run(
-                    ["sudo", "mkdir", "-p", str(cache_dir)],
-                    check=True
+                run_with_sudo(
+                    ["mkdir", "-p", str(cache_dir)]
                 )
             return True
         except Exception as e:
@@ -319,9 +338,8 @@ apply_policy = true
         
         try:
             # Create directory
-            subprocess.run(
-                ["sudo", "mkdir", "-p", str(self.HIMMELBLAU_CONF_DIR)],
-                check=True
+            run_with_sudo(
+                ["mkdir", "-p", str(self.HIMMELBLAU_CONF_DIR)]
             )
             
             # Write config via temp file
@@ -330,9 +348,8 @@ apply_policy = true
                 tmp.write(config)
                 tmp_path = tmp.name
             
-            result = subprocess.run(
-                ["sudo", "cp", tmp_path, str(self.HIMMELBLAU_CONF)],
-                capture_output=True
+            result = run_with_sudo(
+                ["cp", tmp_path, str(self.HIMMELBLAU_CONF)]
             )
             
             Path(tmp_path).unlink(missing_ok=True)
@@ -351,16 +368,14 @@ apply_policy = true
         """
         try:
             # Enable services
-            subprocess.run(
-                ["sudo", "systemctl", "enable", "himmelblaud", "himmelblaud-tasks"],
-                check=True,
+            run_with_sudo(
+                ["systemctl", "enable", "himmelblaud", "himmelblaud-tasks"],
                 timeout=30
             )
             
             # Start main service (tasks service starts via Upholds=)
-            subprocess.run(
-                ["sudo", "systemctl", "start", "himmelblaud"],
-                check=True,
+            run_with_sudo(
+                ["systemctl", "start", "himmelblaud"],
                 timeout=30
             )
             
@@ -400,26 +415,108 @@ apply_policy = true
     
     def rollback(self) -> bool:
         """
-        Rollback configuration changes
+        Rollback configuration changes (removes systemd services and restores configs)
+        
+        NOTE: This does NOT uninstall binaries or remove build files.
+        Use full_uninstall() for complete removal.
         
         Returns:
             True if successful
         """
         success = True
         
-        # Stop services
+        # Stop and disable services
         try:
-            subprocess.run(["sudo", "systemctl", "stop", "himmelblaud"], timeout=30)
-            subprocess.run(["sudo", "systemctl", "disable", "himmelblaud"], timeout=30)
-        except:
-            pass
+            print("Stopping Himmelblau services...")
+            run_with_sudo(["systemctl", "stop", "himmelblaud"], timeout=30)
+            run_with_sudo(["systemctl", "stop", "himmelblaud-tasks"], timeout=30)
+            run_with_sudo(["systemctl", "disable", "himmelblaud"], timeout=30)
+            run_with_sudo(["systemctl", "disable", "himmelblaud-tasks"], timeout=30)
+        except Exception as e:
+            print(f"Warning: Failed to stop services: {e}")
         
-        # Restore backups
+        # Remove systemd service files
+        try:
+            print("Removing systemd service files...")
+            run_with_sudo(["rm", "-f", str(self.SYSTEMD_DIR / "himmelblaud.service")], timeout=10)
+            run_with_sudo(["rm", "-f", str(self.SYSTEMD_DIR / "himmelblaud-tasks.service")], timeout=10)
+            run_with_sudo(["systemctl", "daemon-reload"], timeout=10)
+        except Exception as e:
+            print(f"Warning: Failed to remove service files: {e}")
+        
+        # Remove D-Bus service file
+        try:
+            run_with_sudo(["rm", "-f", str(self.DBUS_DIR / "com.microsoft.identity.broker1.service")], timeout=10)
+        except Exception as e:
+            print(f"Warning: Failed to remove D-Bus service: {e}")
+        
+        # Restore config backups
+        print("Restoring configuration backups...")
         if not self._restore_file(self.NSS_CONF):
+            print("Warning: Failed to restore NSS config")
             success = False
         
         if not self._restore_file(self.PAM_CONF):
+            print("Warning: Failed to restore PAM config")
             success = False
         
+        # Remove Himmelblau config
+        try:
+            print("Removing Himmelblau configuration...")
+            run_with_sudo(["rm", "-rf", str(self.HIMMELBLAU_CONF_DIR)], timeout=10)
+        except Exception as e:
+            print(f"Warning: Failed to remove config: {e}")
+        
+        print("Rollback complete")
         return success
+    
+    def full_uninstall(self) -> bool:
+        """
+        Complete uninstall: removes everything including binaries
+        
+        Returns:
+            True if successful
+        """
+        print("Starting full uninstall...")
+        
+        # First do rollback (services, configs)
+        self.rollback()
+        
+        # Remove Himmelblau binaries
+        binaries = [
+            "/usr/sbin/himmelblaud",
+            "/usr/sbin/himmelblaud_tasks",
+            "/usr/bin/aad-tool",
+            "/usr/sbin/broker",
+            "/usr/bin/linux-entra-sso",
+            "/usr/lib/security/pam_himmelblau.so",
+            "/usr/lib/libnss_himmelblau.so.2",
+        ]
+        
+        print("Removing Himmelblau binaries...")
+        for binary in binaries:
+            try:
+                run_with_sudo(["rm", "-f", binary], timeout=10)
+            except Exception as e:
+                print(f"Warning: Failed to remove {binary}: {e}")
+        
+        # Remove cache directories
+        print("Removing cache directories...")
+        for cache_dir in self.CACHE_DIRS:
+            try:
+                run_with_sudo(["rm", "-rf", str(cache_dir)], timeout=10)
+            except Exception as e:
+                print(f"Warning: Failed to remove {cache_dir}: {e}")
+        
+        # Remove build directory
+        build_dir = Path("/tmp/himmelblau")
+        if build_dir.exists():
+            print("Removing build directory...")
+            try:
+                shutil.rmtree(build_dir)
+            except Exception as e:
+                print(f"Warning: Failed to remove build dir: {e}")
+        
+        print("Full uninstall complete")
+        return True
 

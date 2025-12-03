@@ -8,12 +8,14 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Callable
 from pathlib import Path
+import shutil
 
 from .distro import DistroDetector, DistroInfo, SupportedDistro
 from .validator import SystemValidator, SystemStatus
 from .package_manager import get_package_manager, get_himmelblau_dependencies, PackageManager
 from .himmelblau import HimmelblauBuilder, BuildStatus, BuildProgress
 from .configurator import SystemConfigurator
+from ..utils.sudo_helper import run_with_sudo
 
 
 class InstallStep(Enum):
@@ -183,9 +185,8 @@ class Installer:
         # Enable GDM
         self._update_progress(InstallStep.INSTALL_GDM, 2, "Enabling GDM...")
         
-        import subprocess
         try:
-            subprocess.run(["sudo", "systemctl", "enable", "gdm"], check=True, timeout=30)
+            run_with_sudo(["systemctl", "enable", "gdm"], timeout=30)
         except Exception as e:
             self._update_progress(
                 InstallStep.INSTALL_GDM, 2,
@@ -250,8 +251,8 @@ class Installer:
         # Create builder with progress callback
         self.builder = HimmelblauBuilder(progress_callback=self._on_build_progress)
         
-        # Run build
-        success = self.builder.build_and_install()
+        # Run build (skip cleanup - we need the build dir for service generation)
+        success = self.builder.build_and_install(skip_cleanup=True)
         
         if not success:
             self._update_progress(
@@ -406,11 +407,16 @@ class Installer:
             if not step_func():
                 return False
         
+        # Cleanup build directory after successful installation
+        if self.builder:
+            print("Cleaning up build directory...")
+            self.builder.cleanup()
+        
         return True
     
     def rollback(self) -> bool:
         """
-        Rollback installation
+        Rollback installation (removes configs and services only)
         
         Returns:
             True if successful
@@ -418,4 +424,94 @@ class Installer:
         if self.configurator:
             return self.configurator.rollback()
         return False
+    
+    def full_uninstall(self, remove_gdm: bool = False, remove_build_deps: bool = False) -> bool:
+        """
+        Complete uninstall of all Himmelblau components
+        
+        Args:
+            remove_gdm: Whether to uninstall GDM (dangerous!)
+            remove_build_deps: Whether to remove build dependencies
+            
+        Returns:
+            True if successful
+        """
+        print("\n" + "="*60)
+        print("FULL UNINSTALL - Removing all LinTune/Himmelblau components")
+        print("="*60 + "\n")
+        
+        success = True
+        
+        # Initialize components if needed
+        if not self.configurator:
+            self.configurator = SystemConfigurator()
+        if not self.package_manager:
+            if not self.distro_info:
+                self.distro_info = self.distro_detector.detect()
+            self.package_manager = get_package_manager(self.distro_info.supported)
+        
+        # 1. Full system configuration removal
+        print("\n[1/4] Removing system configuration...")
+        if not self.configurator.full_uninstall():
+            print("Warning: Configuration removal had issues")
+            success = False
+        
+        # 2. Remove build dependencies (optional)
+        if remove_build_deps and self.package_manager:
+            print("\n[2/4] Removing build dependencies...")
+            deps = get_himmelblau_dependencies(self.distro_info.supported)
+            
+            # Filter out essential packages that shouldn't be removed
+            essential = ["git", "python", "base-devel"]
+            deps_to_remove = [d for d in deps if d not in essential]
+            
+            print(f"  Removing: {', '.join(deps_to_remove)}")
+            print(f"  Keeping essential: {', '.join(essential)}")
+            
+            if deps_to_remove:
+                result = self.package_manager.remove(deps_to_remove)
+                if not result:
+                    print("Warning: Failed to remove some dependencies")
+                    success = False
+        else:
+            print("\n[2/4] Skipping build dependencies (use --remove-deps to remove)")
+        
+        # 3. Remove GDM (optional and dangerous)
+        if remove_gdm and self.package_manager:
+            print("\n[3/4] Removing GDM...")
+            print("  WARNING: This will remove your display manager!")
+            result = self.package_manager.remove(["gdm"])
+            if not result:
+                print("Warning: Failed to remove GDM")
+                success = False
+        else:
+            print("\n[3/4] Skipping GDM removal (use --remove-gdm to remove)")
+        
+        # 4. Clean up build artifacts
+        print("\n[4/4] Cleaning build artifacts...")
+        build_dirs = [
+            Path("/tmp/himmelblau"),
+            Path("/tmp/himmelblau-services"),
+        ]
+        
+        for build_dir in build_dirs:
+            if build_dir.exists():
+                try:
+                    shutil.rmtree(build_dir)
+                    print(f"  Removed: {build_dir}")
+                except Exception as e:
+                    print(f"  Warning: Failed to remove {build_dir}: {e}")
+        
+        print("\n" + "="*60)
+        if success:
+            print("UNINSTALL COMPLETE")
+        else:
+            print("UNINSTALL COMPLETED WITH WARNINGS")
+        print("="*60 + "\n")
+        
+        print("Next steps:")
+        print("  - Reboot your system to fully remove Himmelblau")
+        print("  - Check /var/log for any remaining logs")
+        
+        return success
 

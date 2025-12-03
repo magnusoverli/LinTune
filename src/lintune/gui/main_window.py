@@ -175,10 +175,58 @@ class MainWindow(QMainWindow):
         # Re-validate system
         self.system_status = self.system_validator.validate()
         
-        # Update dashboard
-        self.dashboard_view.update_status(self.system_status)
+        # Recreate dashboard with new status
+        self._recreate_dashboard()
         
         self.update_status(f"Ready - {self.distro_info.display_name}")
+    
+    def _recreate_dashboard(self):
+        """Recreate the dashboard view with current status"""
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QCursor
+        from datetime import datetime
+        
+        # Save current view index
+        current_index = self.content_stack.currentIndex()
+        was_on_dashboard = (current_index == 0)
+        
+        # Remove old dashboard
+        old_dashboard = self.content_stack.widget(0)
+        if old_dashboard and isinstance(old_dashboard, DashboardView):
+            # Disconnect all signals from old dashboard to prevent crashes
+            try:
+                old_dashboard.refresh_requested.disconnect()
+                old_dashboard.install_requested.disconnect()
+                old_dashboard.navigate_requested.disconnect()
+            except:
+                pass  # Signals might not be connected
+            
+            self.content_stack.removeWidget(old_dashboard)
+            old_dashboard.deleteLater()
+        
+        # Create new dashboard with updated status
+        self.dashboard_view = DashboardView(self.distro_info, self.system_status)
+        self.dashboard_view.refresh_requested.connect(self.refresh_status)
+        self.dashboard_view.install_requested.connect(self.on_install_requested)
+        self.dashboard_view.navigate_requested.connect(self.navigate_to_view)
+        
+        # Update the checked timestamp on the new dashboard
+        self.dashboard_view.checked_label.setText(f"Checked: {datetime.now().strftime('%H:%M:%S')}")
+        
+        # Finish the refresh button animation on the new dashboard
+        self.dashboard_view.refresh_btn.finish_refresh()
+        
+        # Insert at position 0
+        self.content_stack.insertWidget(0, self.dashboard_view)
+        
+        # Restore to dashboard view if we were viewing it
+        if was_on_dashboard:
+            self.content_stack.setCurrentIndex(0)
+        
+        # Ensure cursor is restored (in case old widget didn't finish)
+        while QApplication.overrideCursor() is not None:
+            QApplication.restoreOverrideCursor()
     
     def on_install_requested(self, mode: str):
         """Handle installation request"""
