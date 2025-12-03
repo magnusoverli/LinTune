@@ -6,12 +6,14 @@ Every push to the `main` branch automatically builds a standalone executable tha
 
 ### Downloading Pre-built Binaries
 
+> **Built on Arch Linux** for optimal compatibility with Arch-based distributions.
+
 1. Go to the [Actions tab](https://github.com/magnusoverli/LinTune/actions)
 2. Click on the latest successful workflow run
-3. Download the `LinTune-linux-x64` artifact
+3. Download the `LinTune-arch-x64` artifact
 4. Extract and run:
    ```bash
-   tar -xzf LinTune-linux-x64.tar.gz
+   tar -xzf LinTune-arch-x64.tar.gz
    chmod +x LinTune
    ./LinTune
    ```

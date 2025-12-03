@@ -36,14 +36,16 @@ A cross-distribution tool for enrolling Linux devices in Microsoft EntraID and I
 
 Download the pre-built executable - no Python installation required!
 
+> **Built for Arch Linux:** Executables are built on Arch Linux for optimal compatibility with Arch-based distributions (Arch, CachyOS, Manjaro, etc.)
+
 1. **Download the latest build:**
    - Go to [Actions](https://github.com/magnusoverli/LinTune/actions)
    - Click the latest successful workflow
-   - Download `LinTune-linux-x64` artifact
+   - Download `LinTune-arch-x64` artifact
 
 2. **Extract and run:**
    ```bash
-   tar -xzf LinTune-linux-x64.tar.gz
+   tar -xzf LinTune-arch-x64.tar.gz
    chmod +x LinTune
    ./LinTune
    ```
