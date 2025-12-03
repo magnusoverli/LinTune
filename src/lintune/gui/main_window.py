@@ -18,6 +18,7 @@ from .settings_view import SettingsView
 from .logs_view import LogsView
 from ..core.distro import DistroDetector
 from ..core.validator import SystemValidator
+from .. import __version__
 
 
 class MainWindow(QMainWindow):
@@ -103,7 +104,7 @@ class MainWindow(QMainWindow):
         about_layout.addWidget(about_title)
         
         about_text = QLabel(
-            "LinTune v0.1.0\n\n"
+            f"LinTune v{__version__}\n\n"
             "EntraID & Intune Setup for Linux\n\n"
             "A cross-distribution tool for enrolling Linux devices\n"
             "in Microsoft EntraID and Intune MDM.\n\n"
@@ -128,7 +129,7 @@ class MainWindow(QMainWindow):
         
         # Status bar labels
         self.status_label = QLabel("Ready")
-        self.version_label = QLabel("v0.1.0")
+        self.version_label = QLabel(f"v{__version__}")
         self.distro_label = QLabel(f"⚡ {self.distro_info.name}")
         
         self.status_bar.addWidget(self.status_label, 1)

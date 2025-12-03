@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt
 
 from .gui.main_window import MainWindow
 from .utils.logger import setup_logging, get_log_file
+from . import __version__
 
 
 def main():
@@ -30,7 +31,7 @@ def main():
         # Create application
         app = QApplication(sys.argv)
         app.setApplicationName("LinTune")
-        app.setApplicationVersion("0.1.0")
+        app.setApplicationVersion(__version__)
         app.setOrganizationName("LinTune")
         logger.info("QApplication created")
         

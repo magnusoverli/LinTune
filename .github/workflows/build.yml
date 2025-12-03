@@ -12,15 +12,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      should_release: ${{ steps.check_release.outputs.should_release }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+    
+    - name: Get version from source
+      id: get_version
+      run: |
+        VERSION=$(python -c "import sys; sys.path.insert(0, 'src'); from lintune import __version__; print(__version__)")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+    
+    - name: Check if release should be created
+      id: check_release
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        # Check if this version tag already exists
+        if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+          echo "should_release=false" >> $GITHUB_OUTPUT
+          echo "Tag v$VERSION already exists, skipping release"
+        else
+          echo "should_release=true" >> $GITHUB_OUTPUT
+          echo "Will create release for v$VERSION"
+        fi
     
     - name: Install system dependencies
       run: |
@@ -91,24 +116,95 @@ jobs:
     
     - name: Package as tarball
       run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
         cd dist
-        tar -czf LinTune-linux-x64.tar.gz LinTune
+        tar -czf LinTune-v${VERSION}-linux-x64.tar.gz LinTune
+        # Also create a generic name for latest
+        cp LinTune-v${VERSION}-linux-x64.tar.gz LinTune-linux-x64.tar.gz
         cd ..
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LinTune-linux-x64
+        name: LinTune-v${{ steps.get_version.outputs.version }}-linux-x64
         path: |
           dist/LinTune
-          dist/LinTune-linux-x64.tar.gz
+          dist/LinTune-v${{ steps.get_version.outputs.version }}-linux-x64.tar.gz
         retention-days: 90
     
-    - name: Upload to release
+    - name: Upload to manual release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          dist/LinTune-linux-x64.tar.gz
+          dist/LinTune-v${{ steps.get_version.outputs.version }}-linux-x64.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create_release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main' && 
+      needs.build.outputs.should_release == 'true'
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: LinTune-v${{ needs.build.outputs.version }}-linux-x64
+        path: dist
+    
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        VERSION="${{ needs.build.outputs.version }}"
+        cat > release_notes.md << EOF
+        ## LinTune v${VERSION}
+        
+        ### 📦 Download
+        
+        Download the standalone executable - no Python installation required!
+        
+        **Linux x64:**
+        \`\`\`bash
+        wget https://github.com/magnusoverli/LinTune/releases/download/v${VERSION}/LinTune-v${VERSION}-linux-x64.tar.gz
+        tar -xzf LinTune-v${VERSION}-linux-x64.tar.gz
+        chmod +x LinTune
+        ./LinTune
+        \`\`\`
+        
+        ### 🚀 What's New
+        
+        See commit history for detailed changes.
+        
+        ### 📋 System Requirements
+        
+        - Linux x86_64
+        - Standard GUI libraries (X11/Wayland)
+        - No Python installation required
+        
+        ---
+        
+        **Full Changelog**: https://github.com/magnusoverli/LinTune/commits/v${VERSION}
+        EOF
+        cat release_notes.md
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ needs.build.outputs.version }}
+        name: LinTune v${{ needs.build.outputs.version }}
+        body_path: release_notes.md
+        files: |
+          dist/LinTune-v${{ needs.build.outputs.version }}-linux-x64.tar.gz
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
