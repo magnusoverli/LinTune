@@ -67,7 +67,9 @@ jobs:
         pyinstaller --onefile \
           --name LinTune \
           --windowed \
+          --paths src \
           --add-data "src/lintune/resources:lintune/resources" \
+          --add-data "src/lintune:lintune" \
           --hidden-import PyQt6 \
           --hidden-import PyQt6.QtCore \
           --hidden-import PyQt6.QtGui \
@@ -75,8 +77,16 @@ jobs:
           --hidden-import distro \
           --hidden-import psutil \
           --hidden-import jinja2 \
+          --hidden-import lintune \
+          --hidden-import lintune.gui \
+          --hidden-import lintune.gui.main_window \
+          --hidden-import lintune.core \
+          --hidden-import lintune.core.distro \
+          --hidden-import lintune.core.validator \
+          --hidden-import lintune.utils \
+          --hidden-import lintune.utils.logger \
           --collect-all PyQt6 \
-          src/lintune/__main__.py
+          lintune_launcher.py
     
     - name: Make executable runnable
       run: chmod +x dist/LinTune

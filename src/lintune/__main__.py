@@ -5,13 +5,23 @@ EntraID & Intune Setup for Linux
 """
 
 import sys
+import os
+
+# Handle imports for both package and frozen (PyInstaller) execution
+if getattr(sys, 'frozen', False):
+    # Running as frozen executable
+    from lintune.gui.main_window import MainWindow
+    from lintune.utils.logger import setup_logging, get_log_file
+    from lintune import __version__
+else:
+    # Running as package
+    from .gui.main_window import MainWindow
+    from .utils.logger import setup_logging, get_log_file
+    from . import __version__
+
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
-
-from .gui.main_window import MainWindow
-from .utils.logger import setup_logging, get_log_file
-from . import __version__
 
 
 def main():
